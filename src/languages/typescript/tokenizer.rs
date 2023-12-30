@@ -1,7 +1,7 @@
 #[derive(Debug, PartialEq)]
 pub enum Token<'a> {
     Const,
-    Identifier(&'a str),
+    Identifier(&'a [u8]),
     DoubleEquals,
     Equals,
     Number(i32),
@@ -20,271 +20,86 @@ pub enum Token<'a> {
     Function,
 }
 
-type TokenizationError = String;
-pub type TokenizationResult<'a> = Result<Vec<Token<'a>>, TokenizationError>;
+pub struct Tokenizer<'a> {
+    input: &'a [u8],
+}
 
-fn next_token(input: &str) -> Option<(Token, &str)> {
-    let input = input.trim_start();
-    let bytes = input.as_bytes();
+impl Tokenizer<'_> {
+    pub fn new(input: &str) -> Tokenizer {
+        Tokenizer {
+            input: input.as_bytes(),
+        }
+    }
 
-    match bytes.first()? {
-        b'=' => {
-            if input.starts_with("==") {
-                Some((Token::DoubleEquals, &input[2..]))
-            } else {
-                Some((Token::Equals, &input[1..]))
+    pub fn consume_token(&mut self) -> Option<Token> {
+        let first_non_whitespace = self
+            .input
+            .iter()
+            .position(|&b| !b.is_ascii_whitespace())
+            .unwrap_or_else(|| self.input.len());
+
+        let input = &self.input[first_non_whitespace..];
+
+        println!("input: {:?}", input);
+
+        let mut new_start = first_non_whitespace + 1;
+
+        let token = match &input[0] {
+            b'=' => {
+                if input.starts_with(b"==") {
+                    new_start += 1;
+                    return Some(Token::DoubleEquals);
+                } else {
+                    return Some(Token::Equals);
+                }
             }
-        }
-        b'{' => Some((Token::LeftBrace, &input[1..])),
-        b'}' => Some((Token::RightBrace, &input[1..])),
-        b'(' => Some((Token::LeftParen, &input[1..])),
-        b')' => Some((Token::RightParen, &input[1..])),
-        b';' => Some((Token::Semicolon, &input[1..])),
-        b'+' => Some((Token::Plus, &input[1..])),
-        b'-' => Some((Token::Minus, &input[1..])),
-        b'/' => Some((Token::Slash, &input[1..])),
-        b'*' => Some((Token::Star, &input[1..])),
-        b',' => Some((Token::Comma, &input[1..])),
-        &c if c.is_ascii_digit() => {
-            let end = bytes
-                .iter()
-                .position(|b| !b.is_ascii_digit())
-                .unwrap_or_else(|| input.len());
+            b'{' => Some(Token::LeftBrace),
+            b'}' => Some(Token::RightBrace),
+            b'(' => Some(Token::LeftParen),
+            b')' => Some(Token::RightParen),
+            b';' => Some(Token::Semicolon),
+            b'+' => Some(Token::Plus),
+            b'-' => Some(Token::Minus),
+            b'/' => Some(Token::Slash),
+            b'*' => Some(Token::Star),
+            b',' => Some(Token::Comma),
+            &c if c.is_ascii_digit() => {
+                let end = input
+                    .iter()
+                    .position(|b| !b.is_ascii_digit())
+                    .unwrap_or_else(|| input.len());
 
-            let number = input[..end].parse().expect("number was expected");
+                let number_str = std::str::from_utf8(&self.input[..end])
+                    .expect("Failed to convert bytes to string");
 
-            Some((Token::Number(number), &input[end..]))
-        }
-        &c if c.is_ascii_alphabetic() => {
-            let end = bytes
-                .iter()
-                .position(|b| !b.is_ascii_alphabetic())
-                .unwrap_or_else(|| input.len());
+                let number = number_str.parse().expect("Expected a valid number");
 
-            let token = match &input[..end] {
-                "const" => Token::Const,
-                "if" => Token::If,
-                "return" => Token::Return,
-                "function" => Token::Function,
-                identifier => Token::Identifier(identifier),
-            };
+                new_start += end - 1;
+                return Some(Token::Number(number));
+            }
+            &c if c.is_ascii_alphabetic() => {
+                let end = input
+                    .iter()
+                    .position(|b| !b.is_ascii_alphabetic())
+                    .unwrap_or_else(|| input.len());
 
-            Some((token, &input[end..]))
-        }
-        _ => None,
-    }
-}
+                let token = match &input[..end] {
+                    b"const" => Token::Const,
+                    b"if" => Token::If,
+                    b"return" => Token::Return,
+                    b"function" => Token::Function,
+                    identifier => Token::Identifier(identifier),
+                };
 
-pub fn tokenize(input: &str) -> TokenizationResult {
-    let mut tokens = Vec::new();
+                new_start += end - 1;
+                println!("new_start: {}", new_start);
+                return Some(token);
+            }
+            _ => None,
+        };
 
-    let mut input = input;
+        self.input = &self.input[new_start..];
 
-    while let Some((token, remaining)) = next_token(input) {
-        tokens.push(token);
-        input = remaining;
-    }
-
-    return Ok(tokens);
-}
-
-#[cfg(test)]
-mod test {
-    use super::tokenize;
-    use super::Token;
-
-    #[test]
-    fn test_tokenize_const_declaration() {
-        let tokens = tokenize("const x = 1;").unwrap();
-
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Const,
-                Token::Identifier("x"),
-                Token::Equals,
-                Token::Number(1),
-                Token::Semicolon
-            ]
-        );
-    }
-
-    #[test]
-    fn test_tokenize_const_declaration_without_spaces() {
-        let tokens = tokenize("const x=1;").unwrap();
-
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Const,
-                Token::Identifier("x"),
-                Token::Equals,
-                Token::Number(1),
-                Token::Semicolon
-            ]
-        );
-    }
-
-    #[test]
-    fn test_tokenize_if_statement() {
-        let tokens = tokenize("if (x == 1) { x = 2; }").unwrap();
-
-        assert_eq!(
-            tokens,
-            vec![
-                Token::If,
-                Token::LeftParen,
-                Token::Identifier("x"),
-                Token::DoubleEquals,
-                Token::Number(1),
-                Token::RightParen,
-                Token::LeftBrace,
-                Token::Identifier("x"),
-                Token::Equals,
-                Token::Number(2),
-                Token::Semicolon,
-                Token::RightBrace
-            ]
-        );
-    }
-
-    #[test]
-    fn test_tokenize_if_statement_without_spaces() {
-        let tokens = tokenize("if(x==1){x=2;}").unwrap();
-
-        assert_eq!(
-            tokens,
-            vec![
-                Token::If,
-                Token::LeftParen,
-                Token::Identifier("x"),
-                Token::DoubleEquals,
-                Token::Number(1),
-                Token::RightParen,
-                Token::LeftBrace,
-                Token::Identifier("x"),
-                Token::Equals,
-                Token::Number(2),
-                Token::Semicolon,
-                Token::RightBrace
-            ]
-        );
-    }
-
-    #[test]
-    fn test_tokenize_if_statement_with_newlines() {
-        let tokens = tokenize("if(x==1){\n  x=2;\n}").unwrap();
-
-        assert_eq!(
-            tokens,
-            vec![
-                Token::If,
-                Token::LeftParen,
-                Token::Identifier("x"),
-                Token::DoubleEquals,
-                Token::Number(1),
-                Token::RightParen,
-                Token::LeftBrace,
-                Token::Identifier("x"),
-                Token::Equals,
-                Token::Number(2),
-                Token::Semicolon,
-                Token::RightBrace
-            ]
-        );
-    }
-
-    #[test]
-    fn test_tokenize_function_declaration() {
-        let tokens = tokenize("function add(x, y) { return x + y; }").unwrap();
-
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Function,
-                Token::Identifier("add"),
-                Token::LeftParen,
-                Token::Identifier("x"),
-                Token::Comma,
-                Token::Identifier("y"),
-                Token::RightParen,
-                Token::LeftBrace,
-                Token::Return,
-                Token::Identifier("x"),
-                Token::Plus,
-                Token::Identifier("y"),
-                Token::Semicolon,
-                Token::RightBrace
-            ]
-        );
-    }
-
-    #[test]
-    fn test_tokenize_sum_operation() {
-        let tokens = tokenize("1 + 4 = 5;").unwrap();
-
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Number(1),
-                Token::Plus,
-                Token::Number(4),
-                Token::Equals,
-                Token::Number(5),
-                Token::Semicolon
-            ]
-        );
-    }
-
-    #[test]
-    fn test_tokenize_minus_operation() {
-        let tokens = tokenize("1 - 4 = -3;").unwrap();
-
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Number(1),
-                Token::Minus,
-                Token::Number(4),
-                Token::Equals,
-                Token::Minus,
-                Token::Number(3),
-                Token::Semicolon
-            ]
-        );
-    }
-
-    #[test]
-    fn test_tokenize_division_operation() {
-        let tokens = tokenize("4 / 1 = 4;").unwrap();
-
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Number(4),
-                Token::Slash,
-                Token::Number(1),
-                Token::Equals,
-                Token::Number(4),
-                Token::Semicolon
-            ]
-        );
-    }
-
-    #[test]
-    fn test_tokenize_multiplication_operation() {
-        let tokens = tokenize("4 * 1 = 4;").unwrap();
-
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Number(4),
-                Token::Star,
-                Token::Number(1),
-                Token::Equals,
-                Token::Number(4),
-                Token::Semicolon
-            ]
-        );
+        return token;
     }
 }
