@@ -40,17 +40,19 @@ impl Tokenizer<'_> {
 
         let input = &self.input[first_non_whitespace..];
 
-        println!("input: {:?}", input);
+        if input.is_empty() {
+            return None;
+        }
 
-        let mut new_start = first_non_whitespace + 1;
+        let mut new_start = 1;
 
-        let token = match &input[0] {
+        let token: Option<Token> = match &input[0] {
             b'=' => {
                 if input.starts_with(b"==") {
                     new_start += 1;
-                    return Some(Token::DoubleEquals);
+                    Some(Token::DoubleEquals)
                 } else {
-                    return Some(Token::Equals);
+                    Some(Token::Equals)
                 }
             }
             b'{' => Some(Token::LeftBrace),
@@ -69,13 +71,13 @@ impl Tokenizer<'_> {
                     .position(|b| !b.is_ascii_digit())
                     .unwrap_or_else(|| input.len());
 
-                let number_str = std::str::from_utf8(&self.input[..end])
-                    .expect("Failed to convert bytes to string");
+                let number_str =
+                    std::str::from_utf8(&input[..end]).expect("Failed to convert bytes to string");
 
                 let number = number_str.parse().expect("Expected a valid number");
 
                 new_start += end - 1;
-                return Some(Token::Number(number));
+                Some(Token::Number(number))
             }
             &c if c.is_ascii_alphabetic() => {
                 let end = input
@@ -92,14 +94,15 @@ impl Tokenizer<'_> {
                 };
 
                 new_start += end - 1;
-                println!("new_start: {}", new_start);
-                return Some(token);
+                Some(token)
             }
             _ => None,
         };
 
-        self.input = &self.input[new_start..];
+        self.input = &input[new_start..];
 
-        return token;
+        println!("Token: {:?}", token);
+
+        token
     }
 }
