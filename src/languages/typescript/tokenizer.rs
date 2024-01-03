@@ -18,6 +18,7 @@ pub enum Token<'a> {
     Comma,
     Return,
     Function,
+    EOF,
 }
 
 pub struct Tokenizer<'a> {
@@ -41,7 +42,7 @@ impl Tokenizer<'_> {
         let input = &self.input[first_non_whitespace..];
 
         if input.is_empty() {
-            return None;
+            return Some(Token::EOF);
         }
 
         let mut new_start = 1;
@@ -65,7 +66,7 @@ impl Tokenizer<'_> {
             b'/' => Some(Token::Slash),
             b'*' => Some(Token::Star),
             b',' => Some(Token::Comma),
-            &c if c.is_ascii_digit() => {
+            b'1'..=b'9' => {
                 let end = input
                     .iter()
                     .position(|b| !b.is_ascii_digit())
@@ -79,7 +80,7 @@ impl Tokenizer<'_> {
                 new_start += end - 1;
                 Some(Token::Number(number))
             }
-            &c if c.is_ascii_alphabetic() => {
+            b'a'..=b'z' | b'A'..=b'Z' => {
                 let end = input
                     .iter()
                     .position(|b| !b.is_ascii_alphabetic())
@@ -96,12 +97,10 @@ impl Tokenizer<'_> {
                 new_start += end - 1;
                 Some(token)
             }
-            _ => None,
+            _ => Some(Token::EOF),
         };
 
         self.input = &input[new_start..];
-
-        println!("Token: {:?}", token);
 
         token
     }
