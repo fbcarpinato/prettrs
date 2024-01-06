@@ -2,6 +2,7 @@
 pub enum Token<'a> {
     Const,
     Identifier(&'a [u8]),
+    TripleEquals,
     DoubleEquals,
     Equals,
     Number(i32),
@@ -16,6 +17,8 @@ pub enum Token<'a> {
     Slash,
     Star,
     Comma,
+    Dot,
+    DoubleQuote,
     Return,
     Function,
     EOF,
@@ -49,7 +52,10 @@ impl Tokenizer<'_> {
 
         let token: Option<Token> = match &input[0] {
             b'=' => {
-                if input.starts_with(b"==") {
+                if input.starts_with(b"===") {
+                    new_start += 2;
+                    Some(Token::TripleEquals)
+                } else if input.starts_with(b"==") {
                     new_start += 1;
                     Some(Token::DoubleEquals)
                 } else {
@@ -66,6 +72,8 @@ impl Tokenizer<'_> {
             b'/' => Some(Token::Slash),
             b'*' => Some(Token::Star),
             b',' => Some(Token::Comma),
+            b'.' => Some(Token::Dot),
+            b'"' => Some(Token::DoubleQuote),
             b'1'..=b'9' => {
                 let end = input
                     .iter()

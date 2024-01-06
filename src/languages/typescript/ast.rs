@@ -30,72 +30,135 @@ pub struct AST {
     root: ASTRootNode,
 }
 
-pub fn build_ast(input: &str) -> AST {
-    let input = &mut input.to_string();
-    let mut tokenizer = Tokenizer::new(input);
+pub fn parse_const_ast(tokenizer: &mut Tokenizer) -> Result<Box<dyn Statement>, String> {
+    let identifier_token = tokenizer.consume_token();
+
+    let mut variable_declaration = VariableDeclaration {
+        identifier: String::new(),
+        value: String::new(),
+    };
+
+    match identifier_token {
+        Some(super::tokenizer::Token::Identifier(identifier)) => {
+            variable_declaration.identifier = String::from_utf8_lossy(identifier)
+                .to_string()
+                .to_lowercase();
+        }
+        _ => {
+            return Err("Expected identifier after const".to_string());
+        }
+    }
+
+    let equals_token = tokenizer.consume_token();
+
+    match equals_token {
+        Some(super::tokenizer::Token::Equals) => (),
+        _ => {
+            return Err("Expected equals after identifier".to_string());
+        }
+    }
+
+    let value_token = tokenizer.consume_token();
+
+    match value_token {
+        Some(super::tokenizer::Token::Number(value)) => {
+            variable_declaration.value = value.to_string();
+        }
+        _ => {
+            return Err("Expected number after equals".to_string());
+        }
+    }
+
+    let semicolon_token = tokenizer.consume_token();
+
+    match semicolon_token {
+        Some(super::tokenizer::Token::Semicolon) => (),
+        _ => {
+            return Err("Expected semicolon after number".to_string());
+        }
+    }
+
+    return Ok(Box::new(VariableStatement {
+        variable_declaration_list: Vec::from([variable_declaration]),
+    }));
+}
+
+pub fn parse_if_statement_ast(tokenizer: &mut Tokenizer) -> Result<Box<dyn Statement>, String> {
+    let left_parenthesis_token = tokenizer.consume_token();
+
+    match left_parenthesis_token {
+        Some(super::tokenizer::Token::LeftParen) => (),
+        _ => {
+            return Err("Expected left parenthesis after if".to_string());
+        }
+    }
+
+    while let Some(token) = tokenizer.consume_token() {
+        println!("Token: {:?}", token);
+        match token {
+            super::tokenizer::Token::RightParen => break,
+            super::tokenizer::Token::EOF => {
+                return Err("Expected right parenthesis after if".to_string());
+            }
+            super::tokenizer::Token::Identifier(ident) => {
+                println!("Identifier: {}", String::from_utf8_lossy(ident));
+            }
+            _ => (),
+        }
+    }
+
+    #[allow(unused_variables)]
+    let left_brace_token = tokenizer.consume_token();
+
+    println!("Left brace token: {:?}", left_brace_token);
+
+    while let Some(token) = tokenizer.consume_token() {
+        println!("Token: {:?}", token);
+        match token {
+            super::tokenizer::Token::RightBrace => break,
+            super::tokenizer::Token::EOF => {
+                return Err("Expected right brace after if".to_string());
+            }
+            super::tokenizer::Token::Identifier(ident) => {
+                println!("Identifier: {}", String::from_utf8_lossy(ident));
+            }
+            _ => (),
+        }
+    }
+
+    return Ok(Box::new(IfStatement {}));
+}
+
+pub fn build_ast(input: String) -> AST {
+    let mut tokenizer = Tokenizer::new(&input);
 
     let mut statements: Vec<Box<dyn Statement>> = Vec::new();
 
-    while let Some(token) = tokenizer.consume_token() {
+    loop {
+        let token = tokenizer.consume_token();
+
         match token {
-            super::tokenizer::Token::If => {
-                let boxed_if = Box::new(IfStatement);
-                statements.push(boxed_if);
+            Some(super::tokenizer::Token::If) => {
+                let statement = parse_if_statement_ast(&mut tokenizer);
+
+                match statement {
+                    Ok(statement) => statements.push(statement),
+                    Err(error) => {
+                        println!("Error: {}", error);
+                    }
+                }
             }
-            super::tokenizer::Token::Const => {
-                let identifier_token = tokenizer.consume_token();
+            Some(super::tokenizer::Token::Const) => {
+                let statement = parse_const_ast(&mut tokenizer);
 
-                let mut variable_declaration = VariableDeclaration {
-                    identifier: String::new(),
-                    value: String::new(),
-                };
-
-                match identifier_token {
-                    Some(super::tokenizer::Token::Identifier(identifier)) => {
-                        variable_declaration.identifier = String::from_utf8_lossy(identifier)
-                            .to_string()
-                            .to_lowercase();
-                    }
-                    _ => {
-                        panic!("Expected identifier after const");
+                match statement {
+                    Ok(statement) => statements.push(statement),
+                    Err(error) => {
+                        println!("Error: {}", error);
                     }
                 }
-
-                let equals_token = tokenizer.consume_token();
-
-                match equals_token {
-                    Some(super::tokenizer::Token::Equals) => (),
-                    _ => {
-                        panic!("Expected equals after identifier");
-                    }
-                } 
-                
-                let value_token = tokenizer.consume_token();
-
-                match value_token {
-                    Some(super::tokenizer::Token::Number(value)) => {
-                        variable_declaration.value = value.to_string();
-                    }
-                    _ => {
-                        panic!("Expected number after equals");
-                    }
-                }
-
-                let semicolon_token = tokenizer.consume_token();
-
-                match semicolon_token {
-                    Some(super::tokenizer::Token::Semicolon) => (),
-                    _ => {
-                        panic!("Expected semicolon after number");
-                    }
-                }
-
-                let statement = Box::new(VariableStatement {
-                    variable_declaration_list: Vec::from([variable_declaration]) 
-                });
-                statements.push(statement);
             }
-            super::tokenizer::Token::EOF => break,
+            Some(super::tokenizer::Token::EOF) => break,
             _ => (),
         }
     }
